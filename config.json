@@ -1,0 +1,6 @@
+{
+	"clientPath" : "./client",
+	"clientType" : "json",
+	"serverPath" : "./server",
+	"serverType" : "./json"
+}
