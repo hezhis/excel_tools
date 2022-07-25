@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/hezhis/excel_tools/config"
 	"io/fs"
 	"log"
 	"os"
@@ -14,15 +15,22 @@ var (
 	wg = sync.WaitGroup{}
 )
 
+func exit(err error) {
+	var e string
+	log.Printf("%v\n按任意键退出\n")
+	fmt.Scanln(&e)
+}
+
 func main() {
 	var path string
 
-	if err := loadConfig(); nil != err {
-		log.Println(err)
-		fmt.Scanln(&path)
+	if err := config.LoadConfig(); nil != err {
+		exit(err)
 		return
 	}
 
+	ExportDefault = config.IsExportDefault()
+	
 	log.Printf("请把需要导出的目录或文件拖进来，回车导出全部配置\n")
 	fmt.Scanln(&path)
 
@@ -40,7 +48,7 @@ func main() {
 		filepath.Walk(path, walkPath)
 	} else {
 		wg.Add(1)
-		go export(path)
+		go exportFile(path)
 	}
 
 	wg.Wait()
@@ -61,12 +69,12 @@ func walkPath(fileName string, info fs.FileInfo, err error) error {
 	ext := filepath.Ext(info.Name())
 	if ".xlsx" == ext || "xls" == ext {
 		wg.Add(1)
-		go export(fileName)
+		go exportFile(fileName)
 	}
 	return nil
 }
 
-func export(fName string) {
+func exportFile(fName string) {
 	start := time.Now()
 	exportExcel(fName)
 	if cost := time.Since(start).Seconds(); cost >= 0 {

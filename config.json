@@ -2,5 +2,6 @@
 	"clientPath" : "./client",
 	"clientType" : "json",
 	"serverPath" : "./server",
-	"serverType" : "./json"
+	"serverType" : "./json",
+	"exportDefault": true
 }

@@ -2,13 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	jsoniter "github.com/hezhis/go"
+	"github.com/hezhis/excel_tools/config"
+	"github.com/hezhis/excel_tools/export"
 	"github.com/tealeg/xlsx"
 	"log"
-	"os"
 	"strings"
-	"text/template"
 )
 
 type SheetDataNew []map[string]string // 原始数据
@@ -22,7 +20,9 @@ type Xls struct {
 	exportDataS map[string]interface{}
 	exportDataC map[string]interface{}
 
-	creator ICreator
+	creator   ICreator
+	sExporter export.Exporter
+	cExporter export.Exporter
 }
 
 func exportExcel(fName string) {
@@ -32,7 +32,26 @@ func exportExcel(fName string) {
 		log.Printf("生成失败! 无法打开配置文件[%s]\n", fName)
 		return
 	}
+
+	if xls := NewXls(file); nil != xls {
+		xls.ParseStruct(file)
+		xls.Parse()
+		xls.Export()
+	}
+}
+
+func NewXls(file *xlsx.File) *Xls {
 	xls := &Xls{}
+
+	xls.sExporter = export.CreateExporter(config.GetType(true))
+	if nil == xls.sExporter {
+		return nil
+	}
+	xls.cExporter = export.CreateExporter(config.GetType(false))
+	if nil == xls.cExporter {
+		return nil
+	}
+
 	xls.meta = make(map[string]SheetDataNew)
 	for _, line := range file.Sheets {
 		sheet := &Sheet{
@@ -45,16 +64,8 @@ func exportExcel(fName string) {
 
 	xls.exportS = make([]*RefField, 0, 4)
 	xls.exportC = make([]*RefField, 0, 4)
-	for _, line := range file.Sheets {
-		if !strings.HasSuffix(strings.ToLower(line.Name), "config") {
-			continue
-		}
 
-		xls.ParseExportS(file, line)
-		xls.ParseExportC(file, line)
-	}
-
-	xls.Parse()
+	return xls
 }
 
 func (xls *Xls) ParseExportS(file *xlsx.File, sheet *xlsx.Sheet) {
@@ -281,6 +292,17 @@ func (xls *Xls) ParseRowData(meta map[string]string, fields []IField) map[string
 	return data
 }
 
+func (xls *Xls) ParseStruct(file *xlsx.File) {
+	for _, line := range file.Sheets {
+		if !strings.HasSuffix(strings.ToLower(line.Name), "config") {
+			continue
+		}
+
+		xls.ParseExportS(file, line)
+		xls.ParseExportC(file, line)
+	}
+}
+
 func (xls *Xls) Parse() {
 	xls.exportDataS = make(map[string]interface{})
 	xls.exportDataC = make(map[string]interface{})
@@ -288,15 +310,18 @@ func (xls *Xls) Parse() {
 		xls.exportDataS[line.Name] = xls.ParseData(line)
 	}
 
-	for name, data := range xls.exportDataS {
-		xls.ExportJson(name, data, true)
-	}
-
 	for _, line := range xls.exportC {
 		xls.exportDataC[line.Name] = xls.ParseData(line)
 	}
+}
+
+func (xls *Xls) Export() {
+	for name, data := range xls.exportDataS {
+		xls.sExporter.Export(name, data, true)
+	}
+
 	for name, data := range xls.exportDataC {
-		xls.ExportJson(name, data, false)
+		xls.cExporter.Export(name, data, false)
 	}
 }
 
@@ -328,47 +353,4 @@ func (xls *Xls) ParseRef(refName string, ref *RefField, refStr string) interface
 		}
 	}
 	return ret
-}
-
-func (xls *Xls) ExportJson(name string, data interface{}, isServer bool) {
-	t := template.New("export_json").Funcs(template.FuncMap{"concat": Concat})
-	tmpl, err := t.Parse("{{.MJson}}")
-	if nil != err {
-		log.Fatalf("%v", err)
-	}
-
-	var path string
-	if isServer {
-		path = fmt.Sprintf("%s/%s.json", config.ServerPath, name)
-	} else {
-		path = fmt.Sprintf("%s/%s.json", config.ClientPath, name)
-	}
-	if len(path) == 0 {
-		log.Println("导出目标目录为空")
-		return
-	}
-	out, err := os.Create(path)
-	if nil != err {
-		log.Fatal("%v", err)
-	}
-	defer out.Close()
-
-	conf := jsoniter.Config{
-		EscapeHTML:  true,
-		SortMapKeys: true,
-	}
-	mJson, err := conf.Froze().MarshalIndent(data, "", "    ")
-	//mJson, err := jsoniter.MarshalIndent(data, "", " ")
-	if nil != err {
-		log.Fatal("%v", err)
-	}
-	type Test struct {
-		MJson string
-	}
-	t1 := &Test{MJson: string(mJson)}
-	err = tmpl.Execute(out, t1)
-
-	if nil != err {
-		log.Println(err)
-	}
 }

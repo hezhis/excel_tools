@@ -19,9 +19,6 @@ func (creator *JsonCreator) Pack(s string) (b []byte) {
 	creator.data = make(map[string]interface{})
 
 	s = strings.TrimSpace(s)
-	if s == "r:attr,m:true" {
-		log.Println("-------------")
-	}
 	for _, line := range strings.Split(s, ";") {
 		index := strings.Index(line, ":")
 		if index < 0 {
